@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+<title>RhythmStrike</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&display=swap" rel="stylesheet"/>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #0c0c0c; --panel: #111;
+  --c0:#FF4466; --c1:#FF8C00; --c2:#FFD700;
+  --c3:#44FF88; --c4:#00BFFF; --c5:#CC66FF;
+  --double:#ffffff;
+}
+html, body {
+  height:100%; width:100%;
+  overflow:hidden; touch-action:none;
+  -webkit-tap-highlight-color:transparent;
+  user-select:none;
+}
+body {
+  background:var(--bg);
+  display:flex; flex-direction:column;
+  align-items:center; font-family:'Orbitron',monospace; color:#fff;
+}
+
+/* HUD */
+#hud {
+  width:100%; max-width:480px;
+  display:flex; justify-content:space-around;
+  padding:8px 0 5px; flex-shrink:0;
+}
+.hud-cell { text-align:center; }
+.hud-cell .lbl { font-size:clamp(8px,2vw,10px); color:#444; letter-spacing:2px; display:block; }
+.hud-cell .val { font-size:clamp(12px,3.5vw,16px); font-weight:900; letter-spacing:1px; display:block; }
+#score-val{color:var(--c2);} #combo-val{color:var(--c3);} #speed-val{color:var(--c0);}
+.heart { font-size:14px; transition:opacity .2s; }
+.heart.lost { opacity:.12; }
+
+/* Game area — fills remaining height */
+#game {
+  position:relative; width:100%; max-width:480px;
+  flex:1; background:var(--panel);
+  border-left:2px solid #1a1a1a; border-right:2px solid #1a1a1a;
+  overflow:hidden; cursor:pointer;
+}
+
+/* Lane columns */
+.lane-col {
+  position:absolute; top:0; bottom:0;
+  z-index:0; transition:background .1s;
+}
+
+/* Dividers */
+.div-line {
+  position:absolute; top:0; bottom:0;
+  width:1px; background:#1a1a1a; z-index:1;
+}
+
+/* Hit zone line */
+#hit-line {
+  position:absolute; left:0; right:0; height:3px;
+  background:#fff; box-shadow:0 0 12px #fff,0 0 24px #ffffff44; z-index:4;
+}
+
+/* Hit zone bumpers — visual targets at the bottom of each lane */
+.bumper {
+  position:absolute; z-index:3;
+  border-radius:50%; border-width:2px; border-style:solid;
+  opacity:.35; transition:opacity .1s, transform .1s;
+}
+.bumper.lit { opacity:.9; transform:scale(1.15); }
+
+/* Tiles */
+.tile {
+  position:absolute; z-index:5;
+  border-radius:6px;
+  display:flex; align-items:center; justify-content:center;
+  font-size:clamp(9px,2.5vw,13px); font-weight:900;
+  letter-spacing:1px; cursor:pointer;
+  transition:filter .06s;
+  -webkit-tap-highlight-color:transparent;
+}
+.tile.double-note {
+  border:3px solid #fff;
+  box-shadow:0 0 18px #ffffff99, inset 0 0 10px rgba(255,255,255,.15);
+}
+.tile.double-note::after {
+  content:'✦✦';
+  font-size:clamp(8px,2vw,11px);
+  color:#fff; opacity:.9;
+}
+.tile:not(.double-note)::after {
+  content:'▼';
+  color:rgba(0,0,0,.35);
+  font-size:clamp(10px,3vw,14px);
+}
+.tile.hit-anim {
+  animation: tileHit .18s ease-out forwards;
+}
+@keyframes tileHit {
+  0%  { transform:scale(1.08); filter:brightness(2.2); opacity:1; }
+  100%{ transform:scale(0.6);  filter:brightness(3);   opacity:0; }
+}
+
+/* Floating effects */
+.effect {
+  position:absolute; z-index:10;
+  font-size:clamp(10px,3vw,13px); font-weight:900; letter-spacing:2px;
+  text-align:center; pointer-events:none;
+  animation:floatUp .55s ease-out forwards;
+  white-space:nowrap;
+}
+@keyframes floatUp {
+  0%  { opacity:1; transform:translateY(0) scale(1.3); }
+  100%{ opacity:0; transform:translateY(-52px) scale(.8); }
+}
+
+/* Missed flash per-lane */
+.miss-flash { animation: missFlash .25s ease-out forwards; }
+@keyframes missFlash {
+  0%  { background:rgba(255,60,60,.25); }
+  100%{ background:transparent; }
+}
+
+/* Speed-up flash */
+#speed-flash {
+  position:absolute; inset:0;
+  background:rgba(255,255,255,.05); z-index:20;
+  pointer-events:none; opacity:0;
+}
+#speed-flash.flash { animation:sflash .3s ease-out forwards; }
+@keyframes sflash { 0%{opacity:1;} 100%{opacity:0;} }
+
+/* Overlays */
+.overlay {
+  position:absolute; inset:0; background:rgba(0,0,0,.92);
+  display:flex; flex-direction:column;
+  align-items:center; justify-content:center;
+  gap:14px; z-index:50;
+}
+.overlay h2 { font-size:clamp(18px,5vw,26px); letter-spacing:6px; }
+.overlay p  { font-size:clamp(10px,2.8vw,13px); color:#666; text-align:center; line-height:2; letter-spacing:1px; }
+.stat       { font-size:clamp(12px,3.5vw,15px); letter-spacing:3px; color:#bbb; }
+.stat span  { font-weight:900; }
+.double-legend {
+  display:flex; align-items:center; gap:8px;
+  background:#1a1a1a; border:2px solid #333; border-radius:4px;
+  padding:8px 16px; font-size:clamp(10px,2.8vw,12px); color:#aaa; letter-spacing:1px;
+}
+.double-legend .swatch {
+  width:28px; height:22px; border-radius:4px; border:2px solid #fff;
+  box-shadow:0 0 8px #ffffff88; background:#888;
+}
+.btn {
+  padding:clamp(11px,3vw,15px) clamp(26px,8vw,42px);
+  font-family:'Orbitron',monospace; font-size:clamp(12px,3.5vw,15px);
+  font-weight:900; letter-spacing:4px; border:none; cursor:pointer; border-radius:2px;
+}
+.btn-start{background:var(--c2);color:#000;}
+.btn-retry{background:var(--c0);color:#fff;}
+.btn:active{filter:brightness(1.2);}
+</style>
+</head>
+<body>
+
+<div id="hud">
+  <div class="hud-cell"><span class="lbl">SCORE</span><span class="val" id="score-val">0</span></div>
+  <div class="hud-cell"><span class="lbl">COMBO</span><span class="val" id="combo-val">x0</span></div>
+  <div class="hud-cell">
+    <span class="lbl">LIVES</span>
+    <div style="display:flex;gap:4px;justify-content:center;margin-top:2px">
+      <span class="heart" id="h0">❤️</span>
+      <span class="heart" id="h1">❤️</span>
+      <span class="heart" id="h2">❤️</span>
+    </div>
+  </div>
+  <div class="hud-cell"><span class="lbl">SPEED</span><span class="val" id="speed-val">LV1</span></div>
+</div>
+
+<div id="game">
+  <div id="speed-flash"></div>
+  <!-- lanes, dividers, bumpers, tiles injected by JS -->
+  <div id="tile-layer"></div>
+  <div id="effect-layer"></div>
+  <div id="hit-line"></div>
+
+  <div class="overlay" id="overlay-start">
+    <h2>RHYTHM<span style="color:var(--c2)">STRIKE</span></h2>
+    <p>TAP tiles as they reach the line<br>Use ALL fingers — multi-touch!</p>
+    <div class="double-legend">
+      <div class="swatch"></div>
+      <span>WHITE BORDER = tap TWO at once!</span>
+    </div>
+    <p style="font-size:clamp(9px,2.5vw,11px);color:#444">3 lives · speed up every 5s</p>
+    <button class="btn btn-start" id="btn-start">TAP TO PLAY</button>
+  </div>
+
+  <div class="overlay" id="overlay-gameover" style="display:none">
+    <h2 style="color:var(--c0)">GAME OVER</h2>
+    <div class="stat">Score <span id="final-score" style="color:var(--c2)">0</span></div>
+    <div class="stat">Best Combo <span id="final-combo" style="color:var(--c3)">x0</span></div>
+    <div class="stat">Max Speed <span id="final-speed" style="color:var(--c0)">LV1</span></div>
+    <button class="btn btn-retry" id="btn-retry">PLAY AGAIN</button>
+  </div>
+</div>
+
+<script>
+// ─────────────────────────────────────────
+//  CONFIG
+// ─────────────────────────────────────────
+const LANES       = 6;
+const COLORS      = ['#FF4466','#FF8C00','#FFD700','#44FF88','#00BFFF','#CC66FF'];
+const HIT_ZONE    = 0.80;   // fraction from top
+const TILE_H      = 82;     // tile height px
+const BASE_SPEED  = 125;    // px/s starting speed
+const SPEED_INC   = 15;     // px/s every 5s
+const HIT_WIN     = 72;     // generous hit window
+const PERF_WIN    = 28;
+const GAP         = 2;      // px between tile and lane wall
+const MAX_LIVES   = 3;
+const DOUBLE_PROB = 0.18;   // 18% chance of a double note
+const KEYS        = ['a','s','d','j','k','l'];
+
+// ─────────────────────────────────────────
+//  STATE
+// ─────────────────────────────────────────
+let tiles=[], score=0, combo=0, maxCombo=0, lives=MAX_LIVES;
+let speed=BASE_SPEED, speedLevel=1;
+let spawnTimer=0, speedTimer=0;
+let lastTime=null, rafId=null;
+let running=false, dead=false, tileId=0;
+
+const game      = document.getElementById('game');
+const tilLayer  = document.getElementById('tile-layer');
+const effLayer  = document.getElementById('effect-layer');
+const hitLine   = document.getElementById('hit-line');
+const scoreEl   = document.getElementById('score-val');
+const comboEl   = document.getElementById('combo-val');
+const speedEl   = document.getElementById('speed-val');
+const sflash    = document.getElementById('speed-flash');
+const oStart    = document.getElementById('overlay-start');
+const oOver     = document.getElementById('overlay-gameover');
+
+// ─────────────────────────────────────────
+//  LAYOUT HELPERS
+// ─────────────────────────────────────────
+function laneW()   { return game.clientWidth / LANES; }
+function laneX(i)  { return i * laneW() + GAP; }
+function tileW()   { return laneW() - GAP*2; }
+function hitPx()   { return game.clientHeight * HIT_ZONE; }
+
+function buildLanes() {
+  // Remove old lane elements
+  document.querySelectorAll('.lane-col,.div-line,.bumper').forEach(e=>e.remove());
+  const lw = laneW();
+  const hp = hitPx();
+  const bumperR = Math.min(lw*0.28, 18);
+
+  for (let i=0; i<LANES; i++) {
+    // Column bg
+    const col = document.createElement('div');
+    col.className = 'lane-col';
+    col.id = 'lane-col-'+i;
+    col.style.cssText = `left:${i*lw}px;width:${lw}px;`;
+    game.insertBefore(col, game.firstChild);
+
+    // Bumper dot at hit zone
+    const bump = document.createElement('div');
+    bump.className = 'bumper';
+    bump.id = 'bumper-'+i;
+    bump.style.cssText = `
+      left:${i*lw + lw/2 - bumperR}px;
+      top:${hp - bumperR}px;
+      width:${bumperR*2}px; height:${bumperR*2}px;
+      border-color:${COLORS[i]};
+      background:${COLORS[i]}22;
+    `;
+    game.insertBefore(bump, game.firstChild);
+  }
+
+  // Dividers
+  for (let i=1; i<LANES; i++) {
+    const d = document.createElement('div');
+    d.className = 'div-line';
+    d.style.left = (i*lw)+'px';
+    game.insertBefore(d, game.firstChild);
+  }
+
+  hitLine.style.top = hp+'px';
+}
+
+// ─────────────────────────────────────────
+//  SPAWN
+// ─────────────────────────────────────────
+function spawnGap() {
+  return Math.max(420, 900 - (speed-BASE_SPEED)*3.2);
+}
+
+function spawnTile() {
+  const isDouble = Math.random() < DOUBLE_PROB;
+
+  if (isDouble) {
+    // Pick 2 distinct lanes
+    const lane1 = Math.floor(Math.random()*LANES);
+    let lane2;
+    do { lane2 = Math.floor(Math.random()*LANES); } while(lane2===lane1);
+    const groupId = 'dbl-'+tileId;
+    createTileEl(lane1, isDouble, groupId);
+    createTileEl(lane2, isDouble, groupId);
+  } else {
+    const lane = Math.floor(Math.random()*LANES);
+    createTileEl(lane, false, null);
+  }
+}
+
+function createTileEl(lane, isDouble, groupId) {
+  const el = document.createElement('div');
+  el.className = 'tile' + (isDouble ? ' double-note' : '');
+  const tw = tileW();
+  el.style.cssText = `
+    left:${laneX(lane)}px; width:${tw}px;
+    height:${TILE_H}px; top:${-TILE_H}px;
+    background:${isDouble ? '#555' : COLORS[lane]};
+    box-shadow:0 0 ${isDouble?20:12}px ${isDouble?'#ffffff88':COLORS[lane]+'99'};
+    ${isDouble?`border-color:${COLORS[lane]};`:'' }
+  `;
+  tilLayer.appendChild(el);
+  const tobj = {id:tileId++, lane, y:-TILE_H, el, isDouble, groupId, hit:false};
+  // Store ref on element for touch hit-testing
+  el._tileRef = tobj;
+  tiles.push(tobj);
+}
+
+// ─────────────────────────────────────────
+//  HIT TILE
+// ─────────────────────────────────────────
+function hitTile(tobj) {
+  if (tobj.hit) return;
+  tobj.hit = true;
+  const dist = Math.abs(tobj.y - hitPx());
+  const perfect = dist < PERF_WIN;
+
+  // Animate tile out
+  tobj.el.classList.add('hit-anim');
+  setTimeout(()=>{ tobj.el.remove(); tiles=tiles.filter(t=>t!==tobj); }, 200);
+
+  combo++;
+  if (combo>maxCombo) maxCombo=combo;
+  score += perfect ? 100*combo : 50*combo;
+  scoreEl.textContent = score;
+  comboEl.textContent = 'x'+combo;
+
+  flashLane(tobj.lane);
+  showEffect(tobj.lane, tobj.y, perfect?'PERFECT':'GOOD');
+}
+
+function flashLane(i) {
+  const col = document.getElementById('lane-col-'+i);
+  const bump = document.getElementById('bumper-'+i);
+  if (col) {
+    col.style.background = COLORS[i]+'30';
+    setTimeout(()=>col.style.background='transparent',130);
+  }
+  if (bump) {
+    bump.classList.add('lit');
+    setTimeout(()=>bump.classList.remove('lit'),130);
+  }
+}
+
+function showEffect(lane, tileY, type) {
+  const el = document.createElement('div');
+  el.className = 'effect';
+  el.style.cssText = `
+    left:${laneX(lane)}px; width:${tileW()}px;
+    top:${Math.max(20, tileY - 30)}px;
+    color:${type==='PERFECT'?'#FFD700':type==='GOOD'?'#44FF88':'#FF5555'};
+    text-align:center;
+  `;
+  el.textContent = type;
+  effLayer.appendChild(el);
+  setTimeout(()=>el.remove(), 600);
+}
+
+function missLane(lane, tileY) {
+  combo=0; comboEl.textContent='x0';
+  const col = document.getElementById('lane-col-'+lane);
+  if (col) {
+    col.classList.add('miss-flash');
+    setTimeout(()=>col.classList.remove('miss-flash'),280);
+  }
+  showEffect(lane, tileY, 'MISS');
+  loseLife();
+}
+
+function loseLife() {
+  lives--;
+  for (let i=0;i<MAX_LIVES;i++)
+    document.getElementById('h'+i).classList.toggle('lost', i>=lives);
+  if (lives<=0) endGame();
+}
+
+// ─────────────────────────────────────────
+//  TOUCH / POINTER HANDLING
+//  Tap directly on tiles
+// ─────────────────────────────────────────
+game.addEventListener('pointerdown', e=>{
+  if (!running||dead) return;
+  e.preventDefault();
+
+  // Walk up from target to find a tile element
+  let el = e.target;
+  while (el && el !== game) {
+    if (el._tileRef) {
+      const t = el._tileRef;
+      if (!t.hit) {
+        // Within hit window?
+        const dist = Math.abs(t.y - hitPx());
+        if (dist < HIT_WIN) {
+          hitTile(t);
+        }
+      }
+      return;
+    }
+    el = el.parentElement;
+  }
+  // Tapped empty space — no penalty
+}, {passive:false});
+
+// ─────────────────────────────────────────
+//  KEYBOARD (desktop)
+// ─────────────────────────────────────────
+document.addEventListener('keydown', e=>{
+  if (!running||dead) return;
+  const lane = KEYS.indexOf(e.key.toLowerCase());
+  if (lane===-1) return;
+  // Hit closest tile in that lane within window
+  let best=null, bestDist=Infinity;
+  for (const t of tiles) {
+    if (t.lane!==lane||t.hit) continue;
+    const d=Math.abs(t.y-hitPx());
+    if (d<HIT_WIN && d<bestDist){best=t;bestDist=d;}
+  }
+  if (best) hitTile(best);
+  else flashLane(lane);
+});
+
+// ─────────────────────────────────────────
+//  GAME LOOP
+// ─────────────────────────────────────────
+function loop(ts) {
+  if (dead) return;
+  if (!lastTime) lastTime=ts;
+  const dt = Math.min((ts-lastTime)/1000, 0.05);
+  lastTime=ts;
+
+  // Speed ramp
+  speedTimer+=dt*1000;
+  if (speedTimer>=5000) {
+    speedTimer=0; speed+=SPEED_INC; speedLevel++;
+    speedEl.textContent='LV'+speedLevel;
+    sflash.classList.remove('flash'); void sflash.offsetWidth; sflash.classList.add('flash');
+  }
+
+  // Spawn
+  spawnTimer+=dt*1000;
+  if (spawnTimer>=spawnGap()) { spawnTimer=0; spawnTile(); }
+
+  // Move tiles
+  const hp=hitPx();
+  for (const t of tiles) {
+    if (t.hit) continue;
+    t.y += speed*dt;
+    t.el.style.top = t.y+'px';
+  }
+
+  // Missed tiles (past hit zone by > 1 tile height)
+  const missed = tiles.filter(t=>!t.hit && t.y>hp+TILE_H*1.15);
+  for (const t of missed) {
+    t.el.remove();
+    tiles=tiles.filter(x=>x!==t);
+    missLane(t.lane, hp+TILE_H*0.5);
+    if (dead) return;
+  }
+
+  rafId=requestAnimationFrame(loop);
+}
+
+// ─────────────────────────────────────────
+//  START / END
+// ─────────────────────────────────────────
+function startGame() {
+  if (rafId) cancelAnimationFrame(rafId);
+  tiles.forEach(t=>t.el.remove());
+  tilLayer.innerHTML=''; effLayer.innerHTML='';
+  tiles=[]; score=0; combo=0; maxCombo=0; lives=MAX_LIVES;
+  speed=BASE_SPEED; speedLevel=1;
+  spawnTimer=0; speedTimer=0; lastTime=null; dead=false; tileId=0;
+  scoreEl.textContent='0'; comboEl.textContent='x0'; speedEl.textContent='LV1';
+  for(let i=0;i<MAX_LIVES;i++) document.getElementById('h'+i).classList.remove('lost');
+  oStart.style.display='none'; oOver.style.display='none';
+  buildLanes();
+  running=true;
+  rafId=requestAnimationFrame(loop);
+}
+
+function endGame() {
+  dead=true; running=false;
+  document.getElementById('final-score').textContent=score;
+  document.getElementById('final-combo').textContent='x'+maxCombo;
+  document.getElementById('final-speed').textContent='LV'+speedLevel;
+  oOver.style.display='flex';
+}
+
+document.getElementById('btn-start').addEventListener('pointerdown', e=>{e.preventDefault();startGame();},{passive:false});
+document.getElementById('btn-retry').addEventListener('pointerdown', e=>{e.preventDefault();startGame();},{passive:false});
+
+window.addEventListener('resize', ()=>{ if(running) buildLanes(); });
+buildLanes();
+</script>
+</body>
+</html>
