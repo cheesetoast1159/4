@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+<title>RhythmStrike</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&display=swap" rel="stylesheet"/>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --c0: #FF5555; --c1: #FFD700; --c2: #44FF88; --c3: #55AAFF;
+    --bg: #0d0d0d; --panel: #141414;
+  }
+  html, body {
+    height: 100%; width: 100%;
+    overflow: hidden; touch-action: none;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+  }
+  body {
+    background: var(--bg);
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: flex-start;
+    font-family: 'Orbitron', monospace; color: #fff;
+  }
+  #hud {
+    width: 100%; max-width: 420px;
+    display: flex; justify-content: space-around;
+    padding: 10px 0 6px;
+    font-size: clamp(11px, 3vw, 14px); letter-spacing: 2px;
+  }
+  #hud .lbl { color: #555; font-size: 0.75em; display: block; margin-bottom: 2px; text-align: center; }
+  #hud .val { display: block; text-align: center; font-weight: 900; font-size: 1.2em; }
+  #score-val { color: var(--c1); } #combo-val { color: var(--c2); } #speed-val { color: var(--c0); }
+  #lives { display: flex; gap: 5px; align-items: center; justify-content: center; margin-top: 2px; }
+  .heart { font-size: 16px; transition: opacity 0.2s; }
+  .heart.lost { opacity: 0.15; }
+  #game {
+    position: relative; width: 100%; max-width: 420px;
+    flex: 1; background: var(--panel);
+    border-left: 2px solid #222; border-right: 2px solid #222;
+    overflow: hidden;
+  }
+  .lane-bg { position: absolute; top: 0; bottom: 0; z-index: 0; }
+  .divider { position: absolute; top: 0; bottom: 0; width: 2px; background: #1e1e1e; z-index: 1; }
+  #hit-line {
+    position: absolute; left: 0; right: 0; height: 4px;
+    background: #fff; box-shadow: 0 0 14px #fff, 0 0 28px #ffffff55; z-index: 5;
+  }
+  .target {
+    position: absolute; z-index: 6;
+    display: flex; align-items: center; justify-content: center;
+    font-size: clamp(12px, 3.5vw, 18px); font-weight: 900;
+    border-width: 3px; border-style: solid; border-radius: 4px;
+    transition: filter 0.08s, background 0.08s;
+  }
+  .target.pressed { filter: brightness(2); }
+  .tile { position: absolute; z-index: 3; border-radius: 8px; }
+  .effect {
+    position: absolute; z-index: 10;
+    font-size: clamp(10px, 3vw, 13px); font-weight: 900;
+    letter-spacing: 2px; text-align: center; pointer-events: none;
+    animation: floatUp 0.55s ease-out forwards;
+  }
+  @keyframes floatUp {
+    0%   { opacity: 1; transform: translateY(0) scale(1.4); }
+    100% { opacity: 0; transform: translateY(-50px) scale(0.8); }
+  }
+  #speed-flash { position: absolute; inset: 0; background: rgba(255,255,255,0.06); z-index: 20; pointer-events: none; opacity: 0; }
+  #speed-flash.flash { animation: sflash 0.35s ease-out forwards; }
+  @keyframes sflash { 0% { opacity: 1; } 100% { opacity: 0; } }
+  .overlay {
+    position: absolute; inset: 0; background: rgba(0,0,0,0.9);
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 16px; z-index: 40;
+  }
+  .overlay h2 { font-size: clamp(20px, 6vw, 28px); letter-spacing: 6px; }
+  .overlay p {
+    font-size: clamp(11px, 3vw, 13px); letter-spacing: 2px;
+    color: #777; text-align: center; line-height: 2;
+  }
+  .stat { font-size: clamp(13px, 3.5vw, 16px); letter-spacing: 3px; color: #ccc; }
+  .stat span { font-weight: 900; }
+  .btn {
+    padding: clamp(12px, 3vw, 16px) clamp(28px, 8vw, 44px);
+    font-family: 'Orbitron', monospace;
+    font-size: clamp(13px, 3.5vw, 16px); font-weight: 900;
+    letter-spacing: 4px; border: none; cursor: pointer; border-radius: 2px; margin-top: 4px;
+  }
+  .btn-start { background: var(--c1); color: #000; }
+  .btn-retry { background: var(--c0); color: #fff; }
+  .btn:active { filter: brightness(1.2); }
+  #tap-row {
+    width: 100%; max-width: 420px;
+    display: flex; height: clamp(72px, 15vw, 96px); flex-shrink: 0;
+  }
+  .tap-btn {
+    flex: 1; background: #181818; border: none; border-top: 3px solid;
+    font-family: 'Orbitron', monospace;
+    font-size: clamp(18px, 5.5vw, 26px); font-weight: 900;
+    cursor: pointer; touch-action: none;
+    transition: background 0.06s, filter 0.06s;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .tap-btn:nth-child(1) { color: var(--c0); border-color: var(--c0); }
+  .tap-btn:nth-child(2) { color: var(--c1); border-color: var(--c1); }
+  .tap-btn:nth-child(3) { color: var(--c2); border-color: var(--c2); }
+  .tap-btn:nth-child(4) { color: var(--c3); border-color: var(--c3); }
+  .tap-btn.active { filter: brightness(1.7); background: #282828; }
+  .tap-btn + .tap-btn { border-left: 1px solid #222; }
+</style>
+</head>
+<body>
+
+<div id="hud">
+  <div><span class="lbl">SCORE</span><span class="val" id="score-val">0</span></div>
+  <div><span class="lbl">COMBO</span><span class="val" id="combo-val">x0</span></div>
+  <div><span class="lbl">LIVES</span>
+    <div id="lives">
+      <span class="heart" id="h0">❤️</span>
+      <span class="heart" id="h1">❤️</span>
+      <span class="heart" id="h2">❤️</span>
+    </div>
+  </div>
+  <div><span class="lbl">SPEED</span><span class="val" id="speed-val">LV1</span></div>
+</div>
+
+<div id="game">
+  <div id="speed-flash"></div>
+  <div class="lane-bg" id="lane-bg-0"></div>
+  <div class="lane-bg" id="lane-bg-1"></div>
+  <div class="lane-bg" id="lane-bg-2"></div>
+  <div class="lane-bg" id="lane-bg-3"></div>
+  <div class="divider" style="left:25%"></div>
+  <div class="divider" style="left:50%"></div>
+  <div class="divider" style="left:75%"></div>
+  <div id="hit-line"></div>
+  <div class="target" id="target-0"></div>
+  <div class="target" id="target-1"></div>
+  <div class="target" id="target-2"></div>
+  <div class="target" id="target-3"></div>
+  <div id="tile-layer"></div>
+  <div id="effect-layer"></div>
+
+  <div class="overlay" id="overlay-start">
+    <h2>READY?</h2>
+    <p>Tap the 4 buttons below<br>when tiles reach the white line<br><br>You have ❤️❤️❤️ 3 lives<br>Speed increases every 5 seconds</p>
+    <button class="btn btn-start" id="btn-start">TAP TO PLAY</button>
+  </div>
+
+  <div class="overlay" id="overlay-gameover" style="display:none">
+    <h2 style="color:var(--c0)">GAME OVER</h2>
+    <div class="stat">Score: <span id="final-score" style="color:var(--c1)">0</span></div>
+    <div class="stat">Best Combo: <span id="final-combo" style="color:var(--c2)">x0</span></div>
+    <div class="stat">Max Speed: <span id="final-speed" style="color:var(--c0)">LV1</span></div>
+    <button class="btn btn-retry" id="btn-retry">PLAY AGAIN</button>
+  </div>
+</div>
+
+<div id="tap-row">
+  <button class="tap-btn" id="tap-0">▲</button>
+  <button class="tap-btn" id="tap-1">▲</button>
+  <button class="tap-btn" id="tap-2">▲</button>
+  <button class="tap-btn" id="tap-3">▲</button>
+</div>
+
+<script>
+const COLORS  = ['#FF5555','#FFD700','#44FF88','#55AAFF'];
+const KEYS    = ['a','s','k','l'];
+const HIT_ZONE   = 0.78;
+const TILE_H     = 96;    // big tiles, easy to hit
+const BASE_SPEED = 120;   // nice and slow to start
+const SPEED_INC  = 16;    // gentle ramp
+const HIT_WIN    = 75;    // very generous hit window
+const PERF_WIN   = 30;
+const GAP        = 3;
+const MAX_LIVES  = 3;
+
+let tiles=[], score=0, combo=0, maxCombo=0, lives=MAX_LIVES;
+let speed=BASE_SPEED, speedLevel=1;
+let spawnTimer=0, speedTimer=0;
+let lastTime=null, rafId=null;
+let running=false, dead=false, tileId=0;
+
+const game     = document.getElementById('game');
+const tilLayer = document.getElementById('tile-layer');
+const effLayer = document.getElementById('effect-layer');
+const hitLine  = document.getElementById('hit-line');
+const scoreEl  = document.getElementById('score-val');
+const comboEl  = document.getElementById('combo-val');
+const speedEl  = document.getElementById('speed-val');
+const sflash   = document.getElementById('speed-flash');
+const oStart   = document.getElementById('overlay-start');
+const oOver    = document.getElementById('overlay-gameover');
+
+const laneX = i  => (i/4)*game.clientWidth + GAP;
+const laneW = () => game.clientWidth/4 - GAP*2;
+const hitPx = () => game.clientHeight * HIT_ZONE;
+
+function initLayout() {
+  hitLine.style.top = hitPx() + 'px';
+  const tgtH = Math.min(52, game.clientHeight * 0.085);
+  for (let i=0; i<4; i++) {
+    document.getElementById('lane-bg-'+i).style.cssText = `left:${i*25}%;width:25%;`;
+    const tgt = document.getElementById('target-'+i);
+    tgt.style.cssText = `
+      left:${laneX(i)}px; width:${laneW()}px;
+      top:${hitPx()-tgtH/2}px; height:${tgtH}px;
+      color:${COLORS[i]}; border-color:${COLORS[i]}; background:${COLORS[i]}20;
+    `;
+  }
+}
+
+function spawnGap() { return Math.max(480, 950 - (speed-BASE_SPEED)*3.5); }
+
+function spawnTile() {
+  const lane = Math.floor(Math.random()*4);
+  const el = document.createElement('div');
+  el.className = 'tile';
+  el.style.cssText = `
+    left:${laneX(lane)}px; width:${laneW()}px;
+    height:${TILE_H}px; top:${-TILE_H}px;
+    background:${COLORS[lane]};
+    box-shadow:0 0 18px ${COLORS[lane]}bb;
+  `;
+  tilLayer.appendChild(el);
+  tiles.push({id:tileId++, lane, y:-TILE_H, el});
+}
+
+function removeTile(t) { t.el.remove(); tiles=tiles.filter(x=>x!==t); }
+
+function showEffect(lane, type) {
+  const el = document.createElement('div');
+  el.className = 'effect';
+  el.style.cssText = `
+    left:${laneX(lane)}px; width:${laneW()}px;
+    top:${hitPx()-55}px;
+    color:${type==='PERFECT'?'#FFD700':type==='GOOD'?'#44FF88':'#FF5555'};
+  `;
+  el.textContent = type;
+  effLayer.appendChild(el);
+  setTimeout(()=>el.remove(), 600);
+}
+
+function flashLane(i) {
+  const bg = document.getElementById('lane-bg-'+i);
+  bg.style.background = COLORS[i]+'35';
+  setTimeout(()=>bg.style.background='transparent', 130);
+  document.getElementById('target-'+i).classList.add('pressed');
+  setTimeout(()=>document.getElementById('target-'+i).classList.remove('pressed'), 130);
+  document.getElementById('tap-'+i).classList.add('active');
+  setTimeout(()=>document.getElementById('tap-'+i).classList.remove('active'), 130);
+}
+
+function loseLife() {
+  lives--;
+  for (let i=0; i<MAX_LIVES; i++)
+    document.getElementById('h'+i).classList.toggle('lost', i>=lives);
+  if (lives<=0) endGame();
+}
+
+function hit(lane) {
+  if (!running||dead) return;
+  flashLane(lane);
+  const hz=hitPx();
+  let best=null, bestDist=Infinity;
+  for (const t of tiles) {
+    if (t.lane!==lane) continue;
+    const dist=Math.abs(t.y-hz);
+    if (dist<HIT_WIN && dist<bestDist) { best=t; bestDist=dist; }
+  }
+  if (best) {
+    removeTile(best);
+    combo++; if(combo>maxCombo) maxCombo=combo;
+    score += bestDist<PERF_WIN ? 100*combo : 50*combo;
+    scoreEl.textContent=score; comboEl.textContent='x'+combo;
+    showEffect(lane, bestDist<PERF_WIN?'PERFECT':'GOOD');
+  }
+  // No penalty for tapping empty lane — beginners love this
+}
+
+function loop(ts) {
+  if (dead) return;
+  if (!lastTime) lastTime=ts;
+  const dt=Math.min((ts-lastTime)/1000, 0.05);
+  lastTime=ts;
+
+  speedTimer+=dt*1000;
+  if (speedTimer>=5000) {
+    speedTimer=0; speed+=SPEED_INC; speedLevel++;
+    speedEl.textContent='LV'+speedLevel;
+    sflash.classList.remove('flash'); void sflash.offsetWidth; sflash.classList.add('flash');
+  }
+
+  spawnTimer+=dt*1000;
+  if (spawnTimer>=spawnGap()) { spawnTimer=0; spawnTile(); }
+
+  const hz=hitPx();
+  for (const t of tiles) { t.y+=speed*dt; t.el.style.top=t.y+'px'; }
+
+  // Collect missed tiles then process
+  const missed=tiles.filter(t=>t.y>hz+TILE_H*1.1);
+  for (const t of missed) {
+    removeTile(t);
+    combo=0; comboEl.textContent='x0';
+    showEffect(t.lane,'MISS');
+    loseLife();
+    if (dead) return;
+  }
+
+  rafId=requestAnimationFrame(loop);
+}
+
+function startGame() {
+  if (rafId) cancelAnimationFrame(rafId);
+  tiles.forEach(t=>t.el.remove());
+  tilLayer.innerHTML=''; effLayer.innerHTML='';
+  tiles=[]; score=0; combo=0; maxCombo=0; lives=MAX_LIVES;
+  speed=BASE_SPEED; speedLevel=1;
+  spawnTimer=0; speedTimer=0; lastTime=null; dead=false; tileId=0;
+  scoreEl.textContent='0'; comboEl.textContent='x0'; speedEl.textContent='LV1';
+  for (let i=0;i<MAX_LIVES;i++) document.getElementById('h'+i).classList.remove('lost');
+  oStart.style.display='none'; oOver.style.display='none';
+  initLayout(); running=true;
+  rafId=requestAnimationFrame(loop);
+}
+
+function endGame() {
+  dead=true; running=false;
+  document.getElementById('final-score').textContent=score;
+  document.getElementById('final-combo').textContent='x'+maxCombo;
+  document.getElementById('final-speed').textContent='LV'+speedLevel;
+  oOver.style.display='flex';
+}
+
+// Keyboard fallback
+document.addEventListener('keydown', e=>{
+  const i=KEYS.indexOf(e.key.toLowerCase());
+  if (i!==-1) hit(i);
+});
+
+// Touch buttons with multi-touch support
+for (let i=0;i<4;i++) {
+  const btn=document.getElementById('tap-'+i);
+  btn.addEventListener('pointerdown', e=>{ e.preventDefault(); hit(i); }, {passive:false});
+}
+
+document.getElementById('btn-start').addEventListener('pointerdown', e=>{ e.preventDefault(); startGame(); }, {passive:false});
+document.getElementById('btn-retry').addEventListener('pointerdown', e=>{ e.preventDefault(); startGame(); }, {passive:false});
+
+window.addEventListener('resize', ()=>{ if(running) initLayout(); });
+initLayout();
+</script>
+</body>
+</html>
